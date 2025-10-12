@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Momentum Interactive</title>
+  <style>
+    :root {
+      --accent: #2c5aa0;
+      --border: #495057;
+      --result-bg: #e7f3ff;
+    }
+
+    body {
+      font-family: system-ui, sans-serif;
+      background: #fff;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      justify-content: center;
+    }
+
+    .container {
+      background: #fff;
+      border: 2px solid var(--border);
+      border-radius: 2px;
+      box-shadow: none;
+      max-width: 480px;
+      width: 100%;
+      padding: 16px;
+    }
+
+    h2 {
+      text-align: center;
+      font-family: monospace;
+      margin-top: 0;
+      margin-bottom: 10px;
+      color: var(--accent);
+      font-size: 1.4rem;
+    }
+
+    h2 span {
+      color: #d9534f;
+    }
+
+    .canvas-wrap {
+      width: 100%;
+      height: 180px;
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      margin-top: 10px;
+      overflow: hidden;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .controls {
+      margin-top: 10px;
+    }
+
+    label {
+      display: block;
+      font-weight: 600;
+      color: var(--accent);
+      margin-top: 6px;
+    }
+
+    input[type=range] {
+      width: 100%;
+    }
+
+    .result {
+      margin-top: 10px;
+      background: var(--result-bg);
+      border: 2px solid var(--accent);
+      text-align: center;
+      padding: 8px;
+      border-radius: 6px;
+      font-family: monospace;
+      font-weight: 600;
+      color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2><span>p</span> = m × v</h2>
+
+    <div class="canvas-wrap">
+      <canvas id="canvas"></canvas>
+    </div>
+
+    <div class="controls">
+      <label for="mass">Mass: <span id="massVal">5</span> kg</label>
+      <input id="mass" type="range" min="1" max="10" step="0.5" value="5">
+
+      <label for="velocity">Velocity: <span id="velVal">3</span> m/s</label>
+      <input id="velocity" type="range" min="-10" max="10" step="0.5" value="3">
+
+      <div class="result">
+        p = <span id="momentumVal">15.0</span> kg·m/s
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+    const mSlider = document.getElementById("mass");
+    const vSlider = document.getElementById("velocity");
+    const mVal = document.getElementById("massVal");
+    const vVal = document.getElementById("velVal");
+    const pVal = document.getElementById("momentumVal");
+
+    let mass = parseFloat(mSlider.value);
+    let velocity = parseFloat(vSlider.value);
+    let posX = 240;
+    let animationFrame;
+
+    function resizeCanvas() {
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * window.devicePixelRatio;
+      canvas.height = rect.height * window.devicePixelRatio;
+      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+    }
+
+    function updateDisplay() {
+      mVal.textContent = mass;
+      vVal.textContent = velocity;
+      pVal.textContent = (mass * velocity).toFixed(1);
+    }
+
+    function draw() {
+      const W = canvas.clientWidth;
+      const H = canvas.clientHeight;
+      ctx.clearRect(0, 0, W, H);
+
+      const groundY = H * 0.8;
+      ctx.strokeStyle = "#495057";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, groundY);
+      ctx.lineTo(W, groundY);
+      ctx.stroke();
+
+      // Maximum possible momentum based on slider ranges
+const maxMass = 10;      // maximum mass from slider
+const maxVelocity = 10;  // maximum velocity from slider
+const maxMomentum = maxMass * maxVelocity;
+
+// Draw the label "Momentum" above the bar
+ctx.fillStyle = "#495057";          // grayish color for text
+ctx.font = "12px monospace";        // small font
+ctx.textAlign = "left";           // center text horizontally
+ctx.fillText("Momentum", 60, 15);   // x = center of bar, y = slightly above the bar
+
+// Momentum bar (green)
+const p = Math.abs(mass * velocity);
+
+// Available width for the bar inside the box
+const availableWidth = W - 120; // same as the rectangle width
+
+// Scale bar length relative to maxMomentum
+const barLength = (p / maxMomentum) * availableWidth;
+
+// Gradient fill
+const barGradient = ctx.createLinearGradient(60, 20, 60 + barLength, 20);
+barGradient.addColorStop(0, "#5cb85c");
+barGradient.addColorStop(1, "#449d44");
+ctx.fillStyle = barGradient;
+ctx.fillRect(60, 20, barLength, 15);
+
+// Box outline
+ctx.strokeStyle = "#495057";
+ctx.strokeRect(60, 20, availableWidth, 15);
+
+      // Object
+      const r = 12 + mass * 2;
+      const y = groundY - r;
+      ctx.beginPath();
+      ctx.arc(posX, y, r, 0, Math.PI * 2);
+      const gradient = ctx.createRadialGradient(posX - 5, y - 5, 0, posX, y, r);
+      gradient.addColorStop(0, "#a8d5ff");
+      gradient.addColorStop(1, "#6ba3d4");
+      ctx.fillStyle = gradient;
+      ctx.fill();
+      ctx.strokeStyle = "#2c5aa0";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Label on object
+      ctx.fillStyle = "#1a3a5c";
+      ctx.font = "bold 12px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(`${mass}kg`, posX, y + 4);
+
+      // Velocity arrow (red)
+      if (velocity !== 0) {
+        const arrowLen = Math.abs(velocity) * 15;
+        ctx.strokeStyle = "#d9534f";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(posX, y);
+        ctx.lineTo(posX + Math.sign(velocity) * arrowLen, y);
+        ctx.stroke();
+
+        // Arrowhead
+        ctx.beginPath();
+        const arrowX = posX + Math.sign(velocity) * arrowLen;
+        ctx.moveTo(arrowX, y);
+        ctx.lineTo(arrowX - Math.sign(velocity) * 8, y - 5);
+        ctx.lineTo(arrowX - Math.sign(velocity) * 8, y + 5);
+        ctx.closePath();
+        ctx.fillStyle = "#d9534f";
+        ctx.fill();
+      }
+    }
+
+    function animate() {
+      const W = canvas.clientWidth;
+      posX += velocity * 0.4;
+
+      // Wrap around when leaving canvas
+      if (posX - 30 > W) posX = -30;
+      if (posX + 30 < 0) posX = W + 30;
+
+      draw();
+      animationFrame = requestAnimationFrame(animate);
+    }
+
+    mSlider.addEventListener("input", () => {
+      mass = parseFloat(mSlider.value);
+      updateDisplay();
+      draw();
+    });
+
+    vSlider.addEventListener("input", () => {
+      velocity = parseFloat(vSlider.value);
+      updateDisplay();
+      draw();
+    });
+
+    window.addEventListener("resize", () => {
+      resizeCanvas();
+      draw();
+    });
+
+    resizeCanvas();
+    updateDisplay();
+    draw();
+    animate();
+  </script>
+</body>
+</html>
