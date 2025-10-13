@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Impulse: Airbag vs Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background: #fff;
+        }
+        .impulse-compact {
+            padding: 20px;
+            background: transparent;
+            border: 2px solid #495057;
+            max-width: 650px;
+            margin: 20px auto;
+            border-radius: 8px;
+        }
+        h3 {
+            text-align: center;
+            color: #495057;
+            margin-top: 0;
+            font-weight: normal;
+        }
+        .content-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        .impulse-canvas, .graph-canvas {
+            display: block;
+            border: 1px solid #495057;
+            background: #fff;
+        }
+        .control-group {
+            margin: 15px 0;
+            text-align: center;
+        }
+        .control-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: #495057;
+        }
+        .control-group input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+        }
+        .slider-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin: 15px 0;
+        }
+        .scenario-btns {
+            text-align: center;
+            margin: 15px 0;
+        }
+        .scenario-btns button {
+            padding: 10px 18px;
+            margin: 5px;
+            font-size: 13px;
+            cursor: pointer;
+            background: #fff;
+            color: #495057;
+            border: 2px solid #495057;
+            border-radius: 4px;
+        }
+        .scenario-btns button:hover {
+            background: #e9ecef;
+        }
+        .crash-btn {
+            background: #d9534f !important;
+            color: #fff !important;
+            border-color: #d9534f !important;
+            font-weight: bold;
+        }
+        .crash-btn:hover {
+            background: #c9302c !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="impulse-compact">
+        <h3>Impulse: FΔt = Δp</h3>
+
+```
+    <div class="content-grid">
+        <canvas id="impulse-canvas" class="impulse-canvas" width="400" height="220"></canvas>
+        <canvas id="graph-canvas" class="graph-canvas" width="200" height="220"></canvas>
+    </div>
+    
+    <div class="slider-grid">
+        <div class="control-group">
+            <label>Mass: <span id="mass-display">70</span> kg</label>
+            <input type="range" id="mass-slider" min="50" max="100" value="70" step="10">
+        </div>
+        <div class="control-group">
+            <label>Velocity: <span id="vel-display">30</span> m/s</label>
+            <input type="range" id="vel-slider" min="10" max="40" value="30" step="5">
+        </div>
+    </div>
+    
+    <div class="scenario-btns">
+        <button id="airbag-btn">With Airbag</button>
+        <button id="dashboard-btn">Without Airbag</button>
+        <button id="crash-btn" class="crash-btn">CRASH TEST</button>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('impulse-canvas');
+    const ctx = canvas.getContext('2d');
+    const graphCanvas = document.getElementById('graph-canvas');
+    const graphCtx = graphCanvas.getContext('2d');
+    
+    let velocity = 30;
+    let driverMass = 70;
+    let scenario = 'airbag';
+    let car = { x: 50, vx: 0, crashing: false };
+    let impactTime = 0;
+    let maxImpactTime = 0;
+    let impactStarted = false;
+    
+    function drawCarSideView(x, impactProgress, crashed) {
+        // Car body - more realistic sedan profile
+        ctx.fillStyle = '#6ba3d4';
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 2;
+        
+        // Main body with curves
+        ctx.beginPath();
+        ctx.moveTo(x, 150);
+        ctx.lineTo(x, 130);
+        ctx.quadraticCurveTo(x + 5, 125, x + 15, 120);
+        ctx.lineTo(x + 25, 105);
+        ctx.lineTo(x + 35, 95);
+        ctx.quadraticCurveTo(x + 45, 92, x + 55, 95);
+        ctx.lineTo(x + 70, 110);
+        ctx.quadraticCurveTo(x + 75, 115, x + 75, 120);
+        ctx.lineTo(x + 75, 130);
+        ctx.quadraticCurveTo(x + 75, 135, x + 72, 140);
+        ctx.lineTo(x + 72, 150);
+        ctx.lineTo(x, 150);
+        ctx.fill();
+        ctx.stroke();
+        
+        // Windshield
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x + 25, 105);
+        ctx.lineTo(x + 35, 95);
+        ctx.stroke();
+        
+        // Side window
+        ctx.beginPath();
+        ctx.moveTo(x + 35, 95);
+        ctx.lineTo(x + 55, 95);
+        ctx.stroke();
+        
+        ctx.beginPath();
+        ctx.moveTo(x + 55, 95);
+        ctx.lineTo(x + 70, 110);
+        ctx.stroke();
+        
+        // Window line
+        ctx.strokeStyle = '#555';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x + 25, 120);
+        ctx.lineTo(x + 70, 120);
+        ctx.stroke();
+        
+        // Door line
+        ctx.beginPath();
+        ctx.moveTo(x + 30, 130);
+        ctx.lineTo(x + 30, 150);
+        ctx.stroke();
+        
+        // Dashboard visible
+        ctx.fillStyle = '#333';
+        ctx.fillRect(x + 48, 125, 18, 10);
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x + 48, 125, 18, 10);
+        
+        // Steering wheel
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(x + 50, 120, 7, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        // Seat
+        ctx.fillStyle = '#555';
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 2;
+        
+        // Seat bottom
+        ctx.fillRect(x + 15, 135, 18, 15);
+        ctx.strokeRect(x + 15, 135, 18, 15);
+        
+        // Seat back
+        ctx.beginPath();
+        ctx.moveTo(x + 15, 135);
+        ctx.lineTo(x + 15, 115);
+        ctx.quadraticCurveTo(x + 15, 110, x + 17, 110);
+        ctx.lineTo(x + 20, 110);
+        ctx.lineTo(x + 20, 135);
+        ctx.fill();
+        ctx.stroke();
+        
+        // Wheels
+        ctx.fillStyle = '#333';
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x + 18, 155, 7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(x + 60, 155, 7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        
+        // Driver - normal position
+        if (!crashed) {
+            // Head
+            ctx.fillStyle = '#ffccaa';
+            ctx.beginPath();
+            ctx.arc(x + 24, 112, 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            
+            // Neck
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(x + 24, 118);
+            ctx.lineTo(x + 25, 123);
+            ctx.stroke();
+            
+            // Body
+            ctx.fillStyle = '#4a90e2';
+            ctx.fillRect(x + 20, 123, 10, 14);
+            ctx.strokeRect(x + 20, 123, 10, 14);
+            
+            // Arms to steering wheel
+            ctx.strokeStyle = '#ffccaa';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(x + 25, 126);
+            ctx.lineTo(x + 43, 120);
+            ctx.stroke();
+        }
+        
+        // Airbag deployment
+        if (crashed && scenario === 'airbag' && impactProgress > 0) {
+            const size = Math.min(impactProgress * 45, 35);
+            
+            // Airbag from steering wheel
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+            ctx.beginPath();
+            ctx.arc(x + 50, 120, size, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#ccc';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            
+            // Fold lines
+            ctx.strokeStyle = '#e0e0e0';
+            ctx.lineWidth = 1;
+            for (let i = 1; i < 4; i++) {
+                ctx.beginPath();
+                ctx.arc(x + 50, 120, size * (i / 4), 0, Math.PI * 2);
+                ctx.stroke();
+            }
+            
+            // Driver cushioned (pushed back)
+            const pushBack = Math.min(impactProgress * 6, 5);
+            
+            // Head
+            ctx.fillStyle = '#ffccaa';
+            ctx.beginPath();
+            ctx.arc(x + 24 - pushBack, 112, 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            
+            // Neck
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(x + 24 - pushBack, 118);
+            ctx.lineTo(x + 25 - pushBack, 123);
+            ctx.stroke();
+            
+            // Body
+            ctx.fillStyle = '#4a90e2';
+            ctx.fillRect(x + 20 - pushBack, 123, 10, 14);
+            ctx.strokeRect(x + 20 - pushBack, 123, 10, 14);
+        }
+        
+        // Dashboard impact
+        if (crashed && scenario === 'dashboard' && impactProgress > 0) {
+            const lurch = Math.min(impactProgress * 30, 22);
+            
+            // Head lurching forward
+            ctx.fillStyle = '#ffccaa';
+            ctx.beginPath();
+            ctx.arc(x + 24 + lurch, 112 + lurch/3, 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            
+            // Neck stretched
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(x + 24 + lurch, 118 + lurch/3);
+            ctx.lineTo(x + 25 + lurch/2, 123);
+            ctx.stroke();
+            
+            // Body bent forward
+            ctx.fillStyle = '#4a90e2';
+            ctx.save();
+            ctx.translate(x + 25 + lurch/2, 130);
+            ctx.rotate(lurch * 0.02);
+            ctx.fillRect(-5, -7, 10, 14);
+            ctx.strokeRect(-5, -7, 10, 14);
+            ctx.restore();
+            
+            // Impact effect
+            if (lurch > 12) {
+                ctx.strokeStyle = '#d9534f';
+                ctx.lineWidth = 3;
+                for (let i = 0; i < 4; i++) {
+                    ctx.beginPath();
+                    ctx.moveTo(x + 48 + i * 3, 128);
+                    ctx.lineTo(x + 50 + i * 3, 133);
+                    ctx.stroke();
+                }
+            }
+        }
+    }
+    
+    function drawWall() {
+        ctx.fillStyle = '#888';
+        ctx.fillRect(340, 70, 25, 100);
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(340, 70, 25, 100);
+        
+        ctx.strokeStyle = '#666';
+        ctx.lineWidth = 1;
+        for (let i = 0; i < 6; i++) {
+            ctx.beginPath();
+            ctx.moveTo(340, 70 + i * 17);
+            ctx.lineTo(365, 70 + i * 17);
+            ctx.stroke();
+        }
+    }
+    
+    function drawRoad() {
+        ctx.fillStyle = '#666';
+        ctx.fillRect(0, 160, 400, 60);
+        
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([15, 10]);
+        ctx.beginPath();
+        ctx.moveTo(0, 180);
+        ctx.lineTo(400, 180);
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }
+    
+    function drawGraph() {
+        graphCtx.clearRect(0, 0, 200, 220);
+        
+        // Title
+        graphCtx.fillStyle = '#000';
+        graphCtx.font = '12px Arial';
+        graphCtx.textAlign = 'center';
+        graphCtx.fillText('Force vs Time', 100, 15);
+        
+        // Axes
+        graphCtx.strokeStyle = '#000';
+        graphCtx.lineWidth = 2;
+        graphCtx.beginPath();
+        graphCtx.moveTo(30, 180);
+        graphCtx.lineTo(30, 30);
+        graphCtx.stroke();
+        graphCtx.beginPath();
+        graphCtx.moveTo(30, 180);
+        graphCtx.lineTo(170, 180);
+        graphCtx.stroke();
+        
+        // Labels
+        graphCtx.font = '10px Arial';
+        graphCtx.textAlign = 'center';
+        graphCtx.fillText('Time', 100, 200);
+        graphCtx.save();
+        graphCtx.translate(12, 105);
+        graphCtx.rotate(-Math.PI/2);
+        graphCtx.fillText('Force', 0, 0);
+        graphCtx.restore();
+        
+        // Only draw graph if crash has started
+        if (impactStarted) {
+            const deltaP = driverMass * velocity;
+            const deltaT = scenario === 'airbag' ? 0.2 : 0.01;
+            const force = deltaP / deltaT;
+            const maxForce = 120000;
+            
+            const timeScale = scenario === 'airbag' ? 120 : 30;
+            const forceHeight = Math.min((force / maxForce) * 130, 130);
+            
+            graphCtx.fillStyle = scenario === 'airbag' ? 'rgba(92, 184, 92, 0.3)' : 'rgba(217, 83, 79, 0.3)';
+            graphCtx.strokeStyle = scenario === 'airbag' ? '#5cb85c' : '#d9534f';
+            graphCtx.lineWidth = 2;
+            
+            // Triangle
+            graphCtx.beginPath();
+            graphCtx.moveTo(30, 180);
+            graphCtx.lineTo(30 + timeScale/2, 180 - forceHeight);
+            graphCtx.lineTo(30 + timeScale, 180);
+            graphCtx.lineTo(30, 180);
+            graphCtx.fill();
+            graphCtx.stroke();
+            
+            // Time indicator - horizontal brace under triangle
+            graphCtx.strokeStyle = scenario === 'airbag' ? '#5cb85c' : '#d9534f';
+            graphCtx.lineWidth = 2;
+            graphCtx.beginPath();
+            graphCtx.moveTo(30, 188);
+            graphCtx.lineTo(30, 192);
+            graphCtx.lineTo(30 + timeScale, 192);
+            graphCtx.lineTo(30 + timeScale, 188);
+            graphCtx.stroke();
+            
+            // Time label
+            graphCtx.fillStyle = scenario === 'airbag' ? '#5cb85c' : '#d9534f';
+            graphCtx.font = 'bold 9px monospace';
+            graphCtx.textAlign = 'center';
+            graphCtx.fillText(`Δt=${deltaT}s`, 30 + timeScale/2, 205);
+            
+            // Current position dot
+            const progress = Math.min(impactTime / maxImpactTime, 1);
+            let currentX, currentY;
+            if (progress < 0.5) {
+                currentX = 30 + (progress * 2 * timeScale/2);
+                currentY = 180 - (progress * 2 * forceHeight);
+            } else {
+                currentX = 30 + timeScale/2 + ((progress - 0.5) * 2 * timeScale/2);
+                currentY = 180 - forceHeight + ((progress - 0.5) * 2 * forceHeight);
+            }
+            graphCtx.fillStyle = '#000';
+            graphCtx.beginPath();
+            graphCtx.arc(currentX, currentY, 4, 0, Math.PI * 2);
+            graphCtx.fill();
+            
+            // Data display on right
+            graphCtx.font = '9px monospace';
+            graphCtx.textAlign = 'left';
+            
+            graphCtx.fillStyle = '#2c5aa0';
+            graphCtx.fillText(`Δp=${deltaP}`, 125, 50);
+            
+            graphCtx.fillStyle = scenario === 'airbag' ? '#5cb85c' : '#d9534f';
+            graphCtx.fillText(`F=${(force/1000).toFixed(0)}kN`, 125, 65);
+            
+            graphCtx.fillStyle = scenario === 'airbag' ? '#5cb85c' : '#d9534f';
+            graphCtx.font = 'bold 10px Arial';
+            graphCtx.fillText(scenario === 'airbag' ? 'SAFE' : 'FATAL', 125, 80);
+        }
+    }
+    
+    function animate() {
+        ctx.clearRect(0, 0, 400, 220);
+        
+        drawRoad();
+        drawWall();
+        
+        if (car.crashing) {
+            if (car.x < 260) {
+                car.x += car.vx;
+                drawCarSideView(car.x, 0, false);
+            } else {
+                if (!impactStarted) {
+                    impactStarted = true;
+                    impactTime = 0;
+                }
+                impactTime++;
+                const progress = impactTime / maxImpactTime;
+                drawCarSideView(260, progress, true);
+                
+                if (impactTime >= maxImpactTime) {
+                    setTimeout(() => {
+                        car.crashing = false;
+                        impactStarted = false;
+                        car.x = 50;
+                        impactTime = 0;
+                    }, 1500);
+                }
+            }
+        } else {
+            drawCarSideView(car.x, 0, false);
+            
+            // Velocity arrow
+            if (car.x === 50) {
+                ctx.strokeStyle = '#d9534f';
+                ctx.fillStyle = '#d9534f';
+                ctx.lineWidth = 2;
+                const arrowLen = velocity * 1.8;
+                ctx.beginPath();
+                ctx.moveTo(car.x + 77, 130);
+                ctx.lineTo(car.x + 77 + arrowLen, 130);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(car.x + 77 + arrowLen, 130);
+                ctx.lineTo(car.x + 77 + arrowLen - 8, 125);
+                ctx.lineTo(car.x + 77 + arrowLen - 8, 135);
+                ctx.closePath();
+                ctx.fill();
+                
+                ctx.fillStyle = '#000';
+                ctx.font = '11px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText(velocity + ' m/s', car.x + 77 + arrowLen/2, 120);
+            }
+        }
+        
+        drawGraph();
+        requestAnimationFrame(animate);
+    }
+    
+    document.getElementById('mass-slider').addEventListener('input', function() {
+        driverMass = parseInt(this.value);
+        document.getElementById('mass-display').textContent = driverMass;
+    });
+    
+    document.getElementById('vel-slider').addEventListener('input', function() {
+        velocity = parseInt(this.value);
+        document.getElementById('vel-display').textContent = velocity;
+    });
+    
+    document.getElementById('airbag-btn').addEventListener('click', function() {
+        scenario = 'airbag';
+        impactStarted = false;
+        car.crashing = false;
+        car.x = 50;
+    });
+    
+    document.getElementById('dashboard-btn').addEventListener('click', function() {
+        scenario = 'dashboard';
+        impactStarted = false;
+        car.crashing = false;
+        car.x = 50;
+    });
+    
+    document.getElementById('crash-btn').addEventListener('click', function() {
+        if (!car.crashing) {
+            car.x = 50;
+            car.vx = velocity / 12;
+            car.crashing = true;
+            impactTime = 0;
+            impactStarted = false;
+            maxImpactTime = scenario === 'airbag' ? 60 : 3;
+        }
+    });
+    
+    animate();
+</script>
+```
+
+</body>
+</html>
