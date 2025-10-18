@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Impulse Graph Explorer</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      min-height: 100vh;
+      margin: 0;
+      padding-top: 35px;
+      transform: scale(0.82); /* Slightly larger than before */
+      transform-origin: top center;
+    }
+
+    .container {
+      width: 540px;
+      background: white;
+      padding: 18px 18px 24px 18px;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    h1 {
+      text-align: center;
+      font-size: 23px;
+      color: #1f2937;
+      margin: 0 0 16px 0;
+    }
+
+    #impulse {
+      color: #3b82f6;
+      font-weight: bold;
+    }
+
+    button {
+      background: #f3f4f6;
+      color: #374151;
+      border: none;
+      padding: 7px 12px;
+      border-radius: 5px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s;
+      font-size: 14px;
+      margin-top: 16px;
+    }
+
+    button:hover {
+      background: #e5e7eb;
+    }
+
+    canvas {
+      border: 1px solid #d1d5db;
+      border-radius: 5px;
+      background: white;
+      cursor: crosshair;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Impulse: J = <span id="impulse">0.00</span> N·s</h1>
+
+    <canvas id="graph" width="480" height="320"></canvas>
+
+    <button id="reset">Reset</button>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('graph');
+    const ctx = canvas.getContext('2d');
+    const impulseDisplay = document.getElementById('impulse');
+    const resetButton = document.getElementById('reset');
+
+    let points = [
+      { x: 1, y: 2 },
+      { x: 3, y: 5 },
+      { x: 5, y: 3 },
+      { x: 7, y: 1 }
+    ];
+    let draggingIndex = null;
+
+    const width = 480;
+    const height = 320;
+    const padding = 50;
+    const graphWidth = width - 2 * padding;
+    const graphHeight = height - 2 * padding;
+    const maxTime = 10;
+    const maxForce = 10;
+    const xScale = graphWidth / maxTime;
+    const yScale = graphHeight / maxForce;
+
+    function toCanvas(x, y) {
+      return {
+        x: padding + x * xScale,
+        y: height - padding - y * yScale
+      };
+    }
+
+    function toData(canvasX, canvasY) {
+      return {
+        x: Math.max(0, Math.min(maxTime, (canvasX - padding) / xScale)),
+        y: Math.max(0, Math.min(maxForce, (height - padding - canvasY) / yScale))
+      };
+    }
+
+    function calculateImpulse() {
+      if (points.length < 2) return 0;
+      const sorted = [...points].sort((a, b) => a.x - b.x);
+      let impulse = 0;
+      for (let i = 0; i < sorted.length - 1; i++) {
+        const { x: x1, y: y1 } = sorted[i];
+        const { x: x2, y: y2 } = sorted[i + 1];
+        impulse += ((y1 + y2) / 2) * (x2 - x1);
+      }
+      return impulse.toFixed(2);
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, width, height);
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, width, height);
+
+      // Grid
+      ctx.strokeStyle = '#f0f0f0';
+      ctx.lineWidth = 1;
+      for (let i = 0; i <= maxTime; i++) {
+        const x = padding + i * xScale;
+        ctx.beginPath();
+        ctx.moveTo(x, padding);
+        ctx.lineTo(x, height - padding);
+        ctx.stroke();
+      }
+      for (let i = 0; i <= maxForce; i++) {
+        const y = height - padding - i * yScale;
+        ctx.beginPath();
+        ctx.moveTo(padding, y);
+        ctx.lineTo(width - padding, y);
+        ctx.stroke();
+      }
+
+      // Axes
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(padding, height - padding);
+      ctx.lineTo(width - padding, height - padding);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(padding, height - padding);
+      ctx.lineTo(padding, padding);
+      ctx.stroke();
+
+      // Labels
+      ctx.fillStyle = '#000';
+      ctx.font = '13px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText('Time (s)', width / 2, height - 20);
+
+      ctx.save();
+      ctx.translate(15, height / 2);
+      ctx.rotate(-Math.PI / 2);
+      ctx.fillText('Force (N)', 0, 0);
+      ctx.restore();
+
+      // Ticks
+      ctx.font = '12px sans-serif';
+      ctx.fillStyle = '#666';
+      for (let i = 0; i <= maxTime; i += 2) {
+        const x = padding + i * xScale;
+        ctx.fillText(i, x, height - padding + 15);
+      }
+      for (let i = 0; i <= maxForce; i += 2) {
+        const y = height - padding - i * yScale;
+        ctx.fillText(i, padding - 10, y);
+      }
+
+      const sortedPoints = [...points].sort((a, b) => a.x - b.x);
+
+      // Area under curve
+      if (sortedPoints.length > 0) {
+        ctx.fillStyle = 'rgba(59, 130, 246, 0.1)';
+        ctx.beginPath();
+        const startPoint = toCanvas(sortedPoints[0].x, 0);
+        ctx.moveTo(startPoint.x, startPoint.y);
+        sortedPoints.forEach(pt => {
+          const cp = toCanvas(pt.x, pt.y);
+          ctx.lineTo(cp.x, cp.y);
+        });
+        const endPoint = toCanvas(sortedPoints[sortedPoints.length - 1].x, 0);
+        ctx.lineTo(endPoint.x, endPoint.y);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      // Curve
+      if (sortedPoints.length > 0) {
+        ctx.strokeStyle = '#3b82f6';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        const first = toCanvas(sortedPoints[0].x, sortedPoints[0].y);
+        ctx.moveTo(first.x, first.y);
+        sortedPoints.forEach(pt => {
+          const cp = toCanvas(pt.x, pt.y);
+          ctx.lineTo(cp.x, cp.y);
+        });
+        ctx.stroke();
+      }
+
+      // Points
+      points.forEach((pt, idx) => {
+        const cp = toCanvas(pt.x, pt.y);
+        ctx.fillStyle = draggingIndex === idx ? '#ef4444' : '#3b82f6';
+        ctx.beginPath();
+        ctx.arc(cp.x, cp.y, draggingIndex === idx ? 9 : 7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      });
+
+      impulseDisplay.textContent = calculateImpulse();
+    }
+
+    function getMousePos(e) {
+      const rect = canvas.getBoundingClientRect();
+      return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    }
+
+    canvas.addEventListener('mousedown', e => {
+      const { x, y } = getMousePos(e);
+      points.forEach((pt, i) => {
+        const cp = toCanvas(pt.x, pt.y);
+        const dist = Math.hypot(x - cp.x, y - cp.y);
+        if (dist < 12) draggingIndex = i;
+      });
+    });
+
+    canvas.addEventListener('mousemove', e => {
+      if (draggingIndex === null) return;
+      const { x, y } = getMousePos(e);
+      points[draggingIndex] = toData(x, y);
+      draw();
+    });
+
+    canvas.addEventListener('mouseup', () => draggingIndex = null);
+    canvas.addEventListener('mouseleave', () => draggingIndex = null);
+
+    canvas.addEventListener('click', e => {
+      const { x, y } = getMousePos(e);
+      points.push(toData(x, y));
+      draw();
+    });
+
+    resetButton.addEventListener('click', () => {
+      points = [
+        { x: 1, y: 2 },
+        { x: 3, y: 5 },
+        { x: 5, y: 3 },
+        { x: 7, y: 1 }
+      ];
+      draw();
+    });
+
+    draw();
+  </script>
+</body>
+</html>
