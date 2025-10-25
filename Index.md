@@ -4,6 +4,6 @@ title: Physics
 description: "Notes"
 ---
 
-#Physics Notes
+# Physics Notes
 
 
